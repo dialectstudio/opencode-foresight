@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+.opencode/foresight/
+
+# Local/session state
+.session_ids
+sessions/
+*.session.json
+
+# Editor / IDE
+.idea/
+*.swp
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/

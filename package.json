@@ -1,0 +1,59 @@
+{
+  "name": "opencode-foresight",
+  "version": "0.1.0",
+  "description": "Persistent long-term memory for OpenCode - automatic hooks plus explicit retain/recall/reflect tools, backed by a local file store",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "keywords": [
+    "opencode",
+    "ai",
+    "memory",
+    "foresight",
+    "agents",
+    "long-term-memory",
+    "coding-agent"
+  ],
+  "license": "MIT",
+  "author": "Jim Stevenson",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dialectstudio/opencode-foresight.git"
+  },
+  "homepage": "https://github.com/dialectstudio/opencode-foresight#readme",
+  "bugs": {
+    "url": "https://github.com/dialectstudio/opencode-foresight/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.35"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
