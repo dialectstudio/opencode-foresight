@@ -33,15 +33,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.local/share/opencode/log/foresight.log`.
 - Replaced the `@opencode-ai/plugin` dependency with `@opencode/plugin`. The
   V2 package is type-only in the build, so `dist/index.js` has no runtime
-  dependency on it.
+  dependency on it. It is declared under `devDependencies`, leaving the
+  published package with no production dependencies.
 - Configuration examples use the V2 `plugins` array. Options now use the
   object form (`{ "package": ..., "options": { ... } }`) instead of the V1
   package-and-options tuple.
-- **Commit `dist/`** rather than relying on a `prepare` script. OpenCode's
-  bundled npm omits devDependencies when preparing a Git dependency, so a
-  `prepare` build fails with `tsup: command not found` and the install
-  aborts. Shipping the built entrypoint means a Git install needs no build
-  step at all. `prepublishOnly` still rebuilds before `npm publish`.
+- **Commit `dist/` and drop the `prepare` script**, so a Git install needs no
+  build step at all. `prepublishOnly` still rebuilds before `npm publish`.
+- **Renamed the `build` script to `bundle`.** npm's Git-dependency
+  preparation (pacote) runs `npm install --force` inside the clone before
+  packing, but only when the package declares a `build`, `prepare`, `prepack`,
+  or install-lifecycle script. `build: tsup` therefore triggered a full
+  install that fails under OpenCode's installer with
+  `git dep preparation failed`, aborting `opencode plugin add` even though
+  nothing ever ran that build. With no preparation-triggering script, npm
+  packs the committed `dist/` unchanged. Do not rename it back.
 
 ## [0.1.0] - 2026-10-10
 

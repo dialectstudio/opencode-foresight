@@ -36,13 +36,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
+    "bundle": "tsup",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run bundle"
   },
   "devDependencies": {
     "@opencode/plugin": "^2.0.27",

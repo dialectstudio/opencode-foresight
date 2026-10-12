@@ -147,8 +147,14 @@ Each scope is a separate directory: `.opencode/foresight/<scope>/memories.jsonl`
 npm install
 npm run typecheck   # tsc --noEmit
 npm test            # vitest run
-npm run build       # tsup → dist/
+npm run bundle      # tsup → dist/
 ```
+
+> **Do not rename `bundle` to `build`.** npm's Git-dependency preparation triggers on a
+> `build` script (along with `prepare`, `prepack`, and the install lifecycles): it runs
+> `npm install --force` inside the clone before packing, and that step fails under
+> OpenCode's installer with `git dep preparation failed`, aborting the plugin install.
+> With no preparation-triggering script present, npm packs the committed `dist/` unchanged.
 
 To dogfood during development, add a relative plugin path to your OpenCode config:
 
@@ -157,9 +163,8 @@ To dogfood during development, add a relative plugin path to your OpenCode confi
 ```
 
 OpenCode loads a plugin package directory (or a direct `.ts`/`.js` file), so point it at the
-repository root. `dist/` is committed, so a Git install needs no build step — OpenCode's
-installer omits devDependencies and cannot run the build itself. Run `npm run build` after
-changing `src/` and commit the rebuilt `dist/`.
+repository root. `dist/` is committed, so a Git install needs no build step at all. Run
+`npm run bundle` after changing `src/` and commit the rebuilt `dist/`.
 
 ## Pitfalls
 

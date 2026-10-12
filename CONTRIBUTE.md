@@ -20,15 +20,20 @@ Requirements:
 ```bash
 npm run typecheck   # tsc --noEmit
 npm test            # vitest run
-npm run build       # tsup → dist/
+npm run bundle      # tsup → dist/
 ```
 
 All three must pass before a PR is merged. `npm run test:watch` and `npm run dev` (tsc watch) are available while iterating.
 
+`bundle` is deliberately **not** named `build`: npm's Git-dependency preparation triggers on a
+`build` script and runs `npm install --force` inside the clone before packing, which fails under
+OpenCode's installer with `git dep preparation failed`. Without a preparation-triggering script,
+npm packs the committed `dist/` unchanged. Do not rename it back.
+
 To dogfood changes in a live OpenCode session, point your config at the source instead of the built package:
 
 ```json
-{ "plugin": ["./path/to/opencode-foresight/src/index.ts"] }
+{ "plugins": ["./path/to/opencode-foresight/src/index.ts"] }
 ```
 
 ## Project layout
@@ -59,7 +64,7 @@ To dogfood changes in a live OpenCode session, point your config at the source i
 1. Open an issue first for larger features or behavior changes — it saves rework.
 2. Fork and branch from `main`: `git checkout -b fix/short-description`.
 3. Keep commits focused and written in the imperative ("Add recency boost to recall", not "Added...").
-4. Make sure `npm run typecheck`, `npm test`, and `npm run build` all pass.
+4. Make sure `npm run typecheck`, `npm test`, and `npm run bundle` all pass.
 5. Update `README.md` if you change configuration options, env vars, tools, or hooks. Add a `CHANGELOG.md` entry for user-visible changes.
 6. Open a pull request with a short description of the problem and the approach.
 
