@@ -37,8 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration examples use the V2 `plugins` array. Options now use the
   object form (`{ "package": ..., "options": { ... } }`) instead of the V1
   package-and-options tuple.
-- Added a `prepare` script so `dist/` is built automatically when OpenCode
-  installs the plugin from Git, where `dist/` is not committed.
+- **Commit `dist/`** rather than relying on a `prepare` script. OpenCode's
+  bundled npm omits devDependencies when preparing a Git dependency, so a
+  `prepare` build fails with `tsup: command not found` and the install
+  aborts. Shipping the built entrypoint means a Git install needs no build
+  step at all. `prepublishOnly` still rebuilds before `npm publish`.
 
 ## [0.1.0] - 2026-10-10
 

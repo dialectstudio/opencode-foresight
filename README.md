@@ -157,7 +157,9 @@ To dogfood during development, add a relative plugin path to your OpenCode confi
 ```
 
 OpenCode loads a plugin package directory (or a direct `.ts`/`.js` file), so point it at the
-repository root — `npm install` runs the `prepare` script and builds `dist/` automatically.
+repository root. `dist/` is committed, so a Git install needs no build step — OpenCode's
+installer omits devDependencies and cannot run the build itself. Run `npm run build` after
+changing `src/` and commit the rebuilt `dist/`.
 
 ## Pitfalls
 
