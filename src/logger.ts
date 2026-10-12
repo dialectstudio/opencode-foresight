@@ -1,77 +1,100 @@
 /**
  * Lightweight logger for the Foresight OpenCode plugin.
  *
- * Routes through OpenCode's server log API (`client.app.log`) when available so
- * messages land in OpenCode's own log stream — visible via `--print-logs` and
- * the OpenCode log files — without writing to stdout/stderr and corrupting the
- * TUI. Falls back to `console.error` when the OpenCode client is unavailable.
+ * OpenCode 2 removed the V1 `client.app.log` API and the V2 plugin context
+ * exposes no replacement, so a log line cannot be routed into OpenCode's own
+ * log stream from inside a plugin. Each line is therefore emitted two ways:
+ *
+ *   - `console.warn`, which reaches the server's stderr and is visible with
+ *     `--print-logs`. `console.log` is deliberately avoided: server stdout is
+ *     the stdio RPC channel under `opencode run`, so writing to it corrupts
+ *     the transport.
+ *   - a plugin-owned file under the OpenCode log directory, so debug output
+ *     survives a session and can be inspected after the fact.
+ *
+ * All levels share those two sinks, so the level is carried in the line
+ * itself rather than by the stream.
  *
  * Levels:
  *   - error / warn / info → always emitted
  *   - debug               → emitted only when `debug` is enabled in config
  */
 
+import { appendFileSync, renameSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-/** Minimal shape of OpenCode's `client.app.log` that we depend on. */
-export interface OpencodeLogClient {
-  app?: {
-    log?: (options: {
-      body: {
-        service: string;
-        level: LogLevel;
-        message: string;
-        extra?: Record<string, unknown>;
-      };
-    }) => unknown;
-  };
-}
-
 export interface LoggerOptions {
-  /** OpenCode client used to write into the server log stream. */
-  client?: OpencodeLogClient;
   /** When true, `debug()` messages are emitted. */
   debug?: boolean;
   /** When true, the logger emits nothing (used as a safe default in tests). */
   silent?: boolean;
+  /** Override the plugin log file path (used by tests). */
+  logFile?: string | null;
 }
 
 const SERVICE = "foresight";
+const LOG_FILENAME = `${SERVICE}.log`;
+const LOG_ROTATE_BYTES = 4 * 1024 * 1024;
+
+/** Directory OpenCode writes its own logs to, honouring OPENCODE_LOG_DIR. */
+function defaultLogDir(): string {
+  const dir = process.env.OPENCODE_LOG_DIR;
+  if (dir) return dir;
+  return join(homedir(), ".local", "share", "opencode", "log");
+}
+
+function rotateIfNeeded(path: string): void {
+  try {
+    if (statSync(path).size > LOG_ROTATE_BYTES) {
+      renameSync(path, `${path}.old`);
+    }
+  } catch {
+    // A missing or unreadable file just means there is nothing to rotate.
+  }
+}
 
 export class Logger {
-  private readonly client?: OpencodeLogClient;
   private readonly debugEnabled: boolean;
   private readonly silent: boolean;
+  private readonly logFile: string | null;
 
   constructor(options: LoggerOptions = {}) {
-    this.client = options.client;
     this.debugEnabled = options.debug ?? false;
     this.silent = options.silent ?? false;
+    this.logFile =
+      options.logFile === undefined ? join(defaultLogDir(), LOG_FILENAME) : options.logFile;
   }
 
   private emit(level: LogLevel, message: string, extra?: Record<string, unknown>): void {
     if (this.silent) return;
 
-    const app = this.client?.app;
-    if (app && typeof app.log === "function") {
+    let line = `service=${SERVICE} level=${level} message=${JSON.stringify(message)}`;
+    if (extra && Object.keys(extra).length) {
       try {
-        // Call as a method on `app` so `this` is preserved — a detached
-        // reference throws inside OpenCode's class method and would be
-        // swallowed, producing no log at all.
-        const result = app.log({ body: { service: SERVICE, level, message, extra } });
-        if (result && typeof (result as Promise<unknown>).then === "function") {
-          (result as Promise<unknown>).then(undefined, () => {});
-        }
-        return;
+        line += ` extra=${JSON.stringify(extra)}`;
       } catch {
-        // Fall through to the console fallback.
+        // Extra payloads that cannot be serialised are simply omitted.
       }
     }
 
-    const line = extra
-      ? `[Foresight] ${message} ${JSON.stringify(extra)}`
-      : `[Foresight] ${message}`;
-    console.error(line);
+    try {
+      // console.warn reaches the server's stderr; console.log does not.
+      console.warn(line);
+    } catch {
+      // Logging must never break the plugin's real behaviour.
+    }
+
+    if (this.logFile) {
+      try {
+        rotateIfNeeded(this.logFile);
+        appendFileSync(this.logFile, `${line}\n`, "utf-8");
+      } catch {
+        // The log directory may not be writable; drop the line rather than throw.
+      }
+    }
   }
 
   error(message: string, error?: unknown): void {

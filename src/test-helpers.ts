@@ -27,16 +27,27 @@ export function assistant(content: string): Message {
   return { role: "assistant", content };
 }
 
-/** Mock OpenCode client returning a fixed message list. */
-export function mockClient(messages: Array<{ role: string; text: string }>) {
-  return {
-    session: {
-      messages: async () => ({
-        data: messages.map((m) => ({
-          info: { role: m.role },
-          parts: [{ type: "text", text: m.text }],
-        })),
-      }),
-    },
-  };
+/**
+ * Mock session-message reader returning a fixed history.
+ *
+ * Mirrors the `{ role, content }` records `hooks.ts` works on; the V2
+ * session-context shape is normalized separately by `normalizeSessionMessages`.
+ */
+export function mockReader(messages: Array<{ role: string; text: string }>) {
+  return async (): Promise<Message[]> => messages.map((m) => ({ role: m.role, content: m.text }));
+}
+
+/**
+ * Mock `ctx.session.context` returning a raw V2 message list, for tests that
+ * exercise `normalizeSessionMessages` end to end.
+ */
+export function mockSessionContext(
+  messages: Array<{ role: string; text: string }>
+): (input: { sessionID: string }) => Promise<unknown> {
+  return async () =>
+    messages.map((m) =>
+      m.role === "user"
+        ? { type: "user", text: m.text }
+        : { type: "assistant", content: [{ type: "text", text: m.text }] }
+    );
 }

@@ -42,10 +42,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.18.35"
+    "@opencode/plugin": "^2.0.27"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -6,30 +6,48 @@
  * Provides:
  *   - Custom tools: foresight_retain, foresight_recall, foresight_reflect
  *   - Auto-retain on session.idle
- *   - Memory injection on the first chat system transform of each session
+ *   - Memory injection on the first model context of each session
  *   - Memory preservation during context compaction
  *
+ * This is an OpenCode 2 plugin: it default-exports a `Plugin.define`
+ * definition with a stable `id` and a `setup(ctx)` that registers its tools
+ * and hooks on the plugin context.
+ *
  * @example
- * ```json
- * // opencode.json
- * { "plugin": ["opencode-foresight"] }
+ * ```jsonc
+ * // opencode.jsonc
+ * { "plugins": ["github:dialectstudio/opencode-foresight"] }
  *
  * // With options:
- * { "plugin": [["opencode-foresight", { "mission": "TypeScript monorepo" }]] }
+ * {
+ *   "plugins": [
+ *     {
+ *       "package": "github:dialectstudio/opencode-foresight",
+ *       "options": { "mission": "TypeScript monorepo" }
+ *     }
+ *   ]
+ * }
  * ```
  */
 
 import { join } from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
-import { loadConfig, type ForesightConfig } from "./config.js";
-import { deriveScopeId, sanitizeScopeSegment } from "./scope.js";
+import type { Plugin } from "@opencode/plugin";
+import { loadConfig, type ForesightConfig } from "./config.js";import { deriveScopeId, sanitizeScopeSegment } from "./scope.js";
 import { MemoryStore } from "./store.js";
 import { createTools } from "./tools.js";
-import { createHooks, createPluginState, type PluginState } from "./hooks.js";
-import { Logger, type OpencodeLogClient } from "./logger.js";
+import {
+  createHooks,
+  createPluginState,
+  makeSessionMessageReader,
+  type PluginState,
+} from "./hooks.js";
+import { Logger } from "./logger.js";
+
+/** Stable plugin ID — OpenCode scopes plugin storage and status by this. */
+export const PLUGIN_ID = "opencode-foresight";
 
 // Module-level state persists across sessions (the plugin is instantiated per
-// session, but the module is loaded once per OpenCode server process).
+// location, but the module is loaded once per OpenCode server process).
 const state: PluginState = createPluginState();
 
 /** Default memory root: <project>/.opencode/foresight */
@@ -42,47 +60,75 @@ function resolveStorePath(memoryDir: string, scopeId: string): string {
   return join(memoryDir, sanitizeScopeSegment(scopeId), "memories.jsonl");
 }
 
-const ForesightPlugin: Plugin = async (input, options) => {
-  const config: ForesightConfig = loadConfig(options);
+/**
+ * The V2 plugin definition.
+ *
+ * V2 requires a default-exported object with a stable `id` and a `setup(ctx)`
+ * function. `Plugin.define` from `@opencode/plugin` is only an identity
+ * function, so this uses a plain object typed as the namespace's `Plugin`
+ * interface instead: identical behavior, with `@opencode/plugin` erased at
+ * build time. That keeps the built entrypoint free of any runtime dependency
+ * on module resolution when OpenCode loads it from a cloned repository.
+ */
+const ForesightPlugin: Plugin.Plugin = {
+  id: PLUGIN_ID,
+  async setup(ctx) {
+    const config: ForesightConfig = loadConfig(ctx.options);
+    const logger = new Logger({ debug: config.debug });
 
-  const logger = new Logger({
-    client: input.client as unknown as OpencodeLogClient,
-    debug: config.debug,
-  });
+    const directory = ctx.location.directory;
+    const scopeId = deriveScopeId(config, directory);
+    const memoryDir = config.memoryDir || defaultMemoryDir(directory);
+    const store = new MemoryStore(resolveStorePath(memoryDir, scopeId));
 
-  const scopeId = deriveScopeId(config, input.directory);
-  const memoryDir = config.memoryDir || defaultMemoryDir(input.directory);
-  const store = new MemoryStore(resolveStorePath(memoryDir, scopeId));
+    logger.info("Foresight plugin initialized", {
+      store: store.filePath,
+      scope: scopeId,
+      autoRecall: config.autoRecall,
+      autoRetain: config.autoRetain,
+      memories: store.count(),
+    });
 
-  logger.info("Foresight plugin initialized", {
-    store: store.filePath,
-    scope: scopeId,
-    autoRecall: config.autoRecall,
-    autoRetain: config.autoRetain,
-    memories: store.count(),
-  });
+    const readMessages = makeSessionMessageReader((input) => ctx.session.context(input));
+    const hooks = createHooks(store, config, state, readMessages, logger);
 
-  const tools = createTools(store, config, logger);
-  const hooks = createHooks(
-    store,
-    config,
-    state,
-    input.client as unknown as Parameters<typeof createHooks>[3],
-    logger
-  );
+    // 1. Custom tools (foresight_retain / recall / reflect)
+    const tools = createTools(store, config, logger);
+    await ctx.tool.transform((editor) => {
+      for (const definition of tools) {
+        editor.add(definition as never);
+      }
+    });
 
-  return {
-    tool: tools,
-    ...hooks,
-  };
+    // 2. Inject recalled memories into the system prompt, once per session.
+    await ctx.session.hook("context", async (event) => {
+      await hooks.recallIntoSystem(event.sessionID, event.system);
+    });
+
+    // 3. Retain before compaction, then inject recall into compaction.
+    await ctx.session.hook("compaction", async (event) => {
+      await hooks.retainBeforeCompaction(event.sessionID, event.system);
+    });
+
+    // 4. Auto-retain the transcript when a session goes idle.
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          await hooks.handleEvent(event as { type?: unknown; data?: unknown });
+        }
+      } catch (error) {
+        // An aborted subscription is the normal shutdown path, not a failure.
+        if (!controller.signal.aborted) {
+          logger.error("Event subscription failed", error);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  },
 };
 
-// Named export for direct import
-export { ForesightPlugin };
-
-// Default export is the Plugin function itself — OpenCode's loader iterates
-// exports and calls function exports as Plugin factories. Keep the entry
-// surface free of utility re-exports so they are not invoked as plugins.
 export default ForesightPlugin;
 
 // Re-export types for consumers

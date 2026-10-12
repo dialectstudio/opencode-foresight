@@ -20,16 +20,19 @@ Structure modeled on [`@vectorize-io/opencode-hindsight`](https://github.com/vec
 
 ## Install
 
+Requires OpenCode 2.x. The plugin implements the V2 plugin API (`{ id, setup(ctx) }`),
+which OpenCode 1.x does not load.
+
 ```bash
-npm install opencode-foresight
+opencode plugin add github:dialectstudio/opencode-foresight
 ```
 
-Register in `opencode.json` (project) or `~/.config/opencode/opencode.json` (global):
+Or register it manually in `opencode.jsonc` (project) or `~/.config/opencode/opencode.jsonc` (global):
 
-```json
+```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-foresight"]
+  "plugins": ["github:dialectstudio/opencode-foresight"]
 }
 ```
 
@@ -37,17 +40,19 @@ Restart OpenCode to load the plugin.
 
 ### With options
 
-```json
+Options use the V2 object form — a `package` key plus an `options` object:
+
+```jsonc
 {
-  "plugin": [
-    [
-      "opencode-foresight",
-      {
+  "plugins": [
+    {
+      "package": "github:dialectstudio/opencode-foresight",
+      "options": {
         "mission": "TypeScript monorepo. Focus on architecture decisions, test patterns, and deployment procedures.",
         "recallBudget": "high",
         "retainEveryNTurns": 5
       }
-    ]
+    }
   ]
 }
 ```
@@ -147,9 +152,12 @@ npm run build       # tsup → dist/
 
 To dogfood during development, add a relative plugin path to your OpenCode config:
 
-```json
-{ "plugin": ["./path/to/opencode-foresight/src/index.ts"] }
+```jsonc
+{ "plugins": ["./path/to/opencode-foresight"] }
 ```
+
+OpenCode loads a plugin package directory (or a direct `.ts`/`.js` file), so point it at the
+repository root — `npm install` runs the `prepare` script and builds `dist/` automatically.
 
 ## Pitfalls
 
